@@ -61,7 +61,7 @@ func ResponseParamsError(responseWriter http.ResponseWriter, requestsErr error, 
 		response = response + LengthParam + " - " + lengthErr.Error() + ".\r\n"
 	}
 
-	responseWriter.WriteHeader(400)
+	responseWriter.WriteHeader(http.StatusBadRequest)
 	responseWriter.Header().Set("Content-Type", "text/plain")
 	io.WriteString(responseWriter, response)
 }
