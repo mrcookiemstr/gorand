@@ -40,7 +40,7 @@ func HandleRandomEndpoint(responseWriter http.ResponseWriter, request *http.Requ
 	if requestsErr != nil || lengthErr != nil {
 		ResponseParamsError(responseWriter, requestsErr, lengthErr)
 	} else {
-		fetchIntResult, fetchIntErr := FetchInts(request.Context(), requests, length)
+		fetchIntResult, fetchIntErr := FetchInts(request.Context(), RandomOrgClient, requests, length)
 
 		if fetchIntErr != nil {
 			ResponseFetchIntError(responseWriter, fetchIntErr)

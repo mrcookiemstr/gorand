@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -55,4 +58,107 @@ func Test_IntToFloatArr(t *testing.T) {
 	assert := assert.New(t)
 	assert.NotNil(result)
 	assert.Equal(result, floatArr)
+}
+
+func Test_ApiCallRoutine_WhenFetchApiClientWorksOk(t *testing.T) {
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelCtx()
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+
+	apiClient := func(noOfInts int) ([]int64, error) {
+		return []int64{1, 2, 3}, nil
+	}
+
+	resultChan := make(chan ApiCallResult)
+	defer close(resultChan)
+
+	go ApiCallRoutine(ctx, &waitGroup, apiClient, 3, resultChan)
+
+	var timeout bool
+	var resultArr []int64
+	var resultErr error
+
+	select {
+	case <-ctx.Done():
+		timeout = true
+		return
+	case result := <-resultChan:
+		resultArr = result.IntArr
+		resultErr = result.Err
+	}
+
+	waitGroup.Wait()
+
+	assert := assert.New(t)
+	assert.False(timeout)
+	assert.NotNil(resultArr)
+	assert.Equal(3, len(resultArr))
+	assert.Nil(resultErr)
+}
+
+func Test_ApiCallRoutine_WhenFetchApiClientError(t *testing.T) {
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelCtx()
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+
+	apiClient := func(noOfInts int) ([]int64, error) {
+		return nil, ErrFetchIntsApi
+	}
+
+	resultChan := make(chan ApiCallResult)
+	defer close(resultChan)
+
+	go ApiCallRoutine(ctx, &waitGroup, apiClient, 3, resultChan)
+
+	var timeout bool
+	var resultErr error
+
+	select {
+	case <-ctx.Done():
+		timeout = true
+		return
+	case result := <-resultChan:
+		resultErr = result.Err
+	}
+
+	waitGroup.Wait()
+
+	assert := assert.New(t)
+	assert.False(timeout)
+	assert.NotNil(resultErr)
+	assert.Equal(ErrFetchIntsApi, resultErr)
+}
+
+func Test_ApiCallRoutine_WhenFetchApiClientTimeout(t *testing.T) {
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelCtx()
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+
+	apiClient := func(noOfInts int) ([]int64, error) {
+		time.Sleep(2 * time.Second)
+		return []int64{1, 2, 3}, nil
+	}
+
+	resultChan := make(chan ApiCallResult)
+	defer close(resultChan)
+
+	go ApiCallRoutine(ctx, &waitGroup, apiClient, 3, resultChan)
+
+	var timeout bool
+
+	select {
+	case <-ctx.Done():
+		timeout = true
+	}
+
+	waitGroup.Wait()
+
+	assert := assert.New(t)
+	assert.True(timeout)
 }

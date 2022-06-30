@@ -10,17 +10,9 @@ import (
 	"gonum.org/v1/gonum/stat"
 )
 
-var (
-	ErrRandApiKey    = errors.New("wrong api key")
-	ErrRandApiClient = errors.New("error while api clinet")
-	ErrApiIntRange   = errors.New("int range out of bound")
-	ErrApiNetwork    = errors.New("network error")
-
-	ErrFetchIntsTimeout = errors.New("timeout")
-	ErrFetchIntsApi     = errors.New("api error")
-)
-
 type (
+	RandomOrgClinetFunc func(int) ([]int64, error)
+
 	ApiCallResult struct {
 		IntArr []int64
 		Err    error
@@ -30,6 +22,30 @@ type (
 		StdDev float64 `json:"stddev"`
 		Data   []int64 `json:"data"`
 	}
+)
+
+const (
+	RandomOrgKey = "665740fa-1cad-4fa5-8bdf-9bbfb2a25b7e"
+)
+
+var (
+	RandomOrgClient = func(noOfInts int) ([]int64, error) {
+		api := randomorg.NewRandom(RandomOrgKey)
+		result, err := api.GenerateIntegers(noOfInts, 0, 999999)
+
+		if err != nil && (errors.Is(err, randomorg.ErrParamRange) || errors.Is(err, randomorg.ErrAPIKey)) {
+			panic(err)
+		} else if err != nil {
+			return []int64{}, ErrApiNetwork
+		}
+
+		return result, nil
+	}
+
+	ErrApiNetwork = errors.New("network error")
+
+	ErrFetchIntsTimeout = errors.New("timeout")
+	ErrFetchIntsApi     = errors.New("api error")
 )
 
 func NewApiCallResult(intArr []int64, err error) ApiCallResult {
@@ -80,35 +96,10 @@ func IntToFloatArr(intArr []int64) []float64 {
 	return floatArr
 }
 
-func IntsFromRandomOrg(apiKey string, noOfInts int) ([]int64, error) {
-	if apiKey == "" {
-		return nil, ErrRandApiKey
-	}
+func ApiCallRoutine(ctx context.Context, waitGrpoup *sync.WaitGroup, client RandomOrgClinetFunc, noOfInts int, resultsChan chan<- ApiCallResult) {
+	defer waitGrpoup.Done()
 
-	randApi := randomorg.NewRandom(apiKey)
-	resultValues, err := randApi.GenerateIntegers(noOfInts, 0, 999999)
-
-	if err != nil && errors.Is(err, randomorg.ErrParamRange) {
-		return []int64{}, ErrApiIntRange
-	}
-
-	if err != nil && errors.Is(err, randomorg.ErrAPIKey) {
-		return []int64{}, ErrRandApiKey
-	}
-
-	if err != nil {
-		return []int64{}, ErrApiNetwork
-	}
-
-	return resultValues, nil
-}
-
-func ApiCallRoutine(ctx context.Context, waitGrpoup *sync.WaitGroup, noOfInts int, resultsChan chan<- ApiCallResult) {
-	defer func() {
-		waitGrpoup.Done()
-	}()
-
-	result, err := IntsFromRandomOrg("665740fa-1cad-4fa5-8bdf-9bbfb2a25b7e", noOfInts)
+	result, err := client(noOfInts)
 
 	select {
 	case <-ctx.Done():
@@ -118,7 +109,7 @@ func ApiCallRoutine(ctx context.Context, waitGrpoup *sync.WaitGroup, noOfInts in
 	}
 }
 
-func FetchInts(ctx context.Context, concurentRequestNo int, noOfInts int) ([]FetchIntsResult, error) {
+func FetchInts(ctx context.Context, client RandomOrgClinetFunc, concurentRequestNo int, noOfInts int) ([]FetchIntsResult, error) {
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(concurentRequestNo)
 
@@ -126,7 +117,7 @@ func FetchInts(ctx context.Context, concurentRequestNo int, noOfInts int) ([]Fet
 	defer close(resultChan)
 
 	for n := 0; n < concurentRequestNo; n++ {
-		go ApiCallRoutine(ctx, &waitGroup, noOfInts, resultChan)
+		go ApiCallRoutine(ctx, &waitGroup, client, noOfInts, resultChan)
 	}
 
 	apiResultArr := []ApiCallResult{}
