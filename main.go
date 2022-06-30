@@ -9,10 +9,9 @@ import (
 )
 
 const (
-	defaultHostName    = "localhost"
-	envHttpPortName    = "GORAND_HTTP_PORT"
-	envRandomOrgApiKey = "GORAND_API_KEY"
-	defaultHttpPort    = "8080"
+	defaultHostName = "localhost"
+	envHttpPortName = "GORAND_HTTP_PORT"
+	defaultHttpPort = "8080"
 )
 
 func ProvideHostName() string {
